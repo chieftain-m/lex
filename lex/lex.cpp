@@ -1,20 +1,64 @@
-﻿// lex.cpp : 此文件包含 "main" 函数。程序执行将在此处开始并结束。
-//
-
-#include <iostream>
+﻿#include <iostream>
+#include <vector>
+#include <string>
+#include <fstream>
+#include <iomanip>
+using namespace std;
+void filterSource(char source[], int num)//编译预处理，取出无用的字符和注释
+{
+	char temp[5000];
+	int count = 0;
+	for (int i = 0; i <= num; i++)
+	{
+		if (source[i] == '/'&&source[i + 1] == '/')
+		{//若为单行注释“//”,则去除注释后面的东西，直至遇到回车换行
+			while (source[i] != '\n')
+			{
+				i++;//向后扫描
+			}
+		}
+		if (source[i] == '/'&&source[i + 1] == '*')
+		{//若为多行注释“/* 。。。*/”则去除该内容
+			i += 2;
+			while (source[i] != '*' || source[i + 1] != '/')
+			{
+				i++;
+				if (source[i] == 0)
+				{
+					printf("注释出错，没有找到 */，程序结束！！！\n");
+					exit(0);
+				}
+			}
+			i += 2;//跨过“*/”
+		}
+		if (source[i] != '\n'&&source[i] != '\t'&&source[i] != '\v'&&source[i] != '\r')
+		{//若出现无用字符，则过滤；否则加载
+			temp[count++] = source[i];
+		}
+	}
+	temp[count] = '\0';
+	strcpy_s(source, 4096, temp);//产生净化之后的源程序
+}
 
 int main()
 {
-    std::cout << "Hello World!\n";
+	string filePath;
+	cout << "请输入源代码文件路径：";
+	cin >> filePath;
+	ifstream inputfile(filePath); //构造一个ifstream并打开给定文件
+	if (!inputfile)
+	{
+		cerr << "文件打开失败! " << endl;
+		return 0;
+	}
+	char chars[4096];
+	memset(chars, 0, sizeof(chars));
+	inputfile.getline(chars, 4096, EOF);
+	int num = 0;
+	while (chars[num] != 0) {
+		num++;
+	}
+	filterSource(chars, num);
+	inputfile.close();//关闭文件
+	cout << "预处理后程序如下\n" << chars << endl;
 }
-
-// 运行程序: Ctrl + F5 或调试 >“开始执行(不调试)”菜单
-// 调试程序: F5 或调试 >“开始调试”菜单
-
-// 入门使用技巧: 
-//   1. 使用解决方案资源管理器窗口添加/管理文件
-//   2. 使用团队资源管理器窗口连接到源代码管理
-//   3. 使用输出窗口查看生成输出和其他消息
-//   4. 使用错误列表窗口查看错误
-//   5. 转到“项目”>“添加新项”以创建新的代码文件，或转到“项目”>“添加现有项”以将现有代码文件添加到项目
-//   6. 将来，若要再次打开此项目，请转到“文件”>“打开”>“项目”并选择 .sln 文件
