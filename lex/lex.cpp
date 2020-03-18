@@ -57,11 +57,20 @@ using namespace std;
 // -1为无法识别的字符标志码
 #define ERROR -1       
 int errorNum = 0;  // 记录词法分析错误的个数
-
+int hang = 1;
+struct Node
+{
+	int first;
+	string second;
+	int third;
+};
 // 找到第一个有效字符的位置
 int getFirstChar(string str, int begin) {
 	while (true) {
-		if (str[begin] != ' ')	return begin;
+		if (str[begin] != ' '&&str[begin] != '\n')	return begin;
+		if (str[begin] == '\n') {
+			hang++;
+		}
 		begin++;
 	}
 }
@@ -76,27 +85,27 @@ string getWord(string str, int begin, int& end) {
 }
 
 //编译预处理，取出无用的字符和注释
-void filterSource(char source[], int num){
+void filterSource(char source[], int num) {
 	char temp[5000];
 	int count = 0;
-	for (int i = 0; i <= num; i++){
-		if (source[i] == '/'&&source[i + 1] == '/'){//单行注释
-			while (source[i] != '\n'){
+	for (int i = 0; i <= num; i++) {
+		if (source[i] == '/'&&source[i + 1] == '/') {//单行注释
+			while (source[i] != '\n') {
 				i++;//向后扫描
 			}
 		}
-		if (source[i] == '/'&&source[i + 1] == '*'){//多行注释
+		if (source[i] == '/'&&source[i + 1] == '*') {//多行注释
 			i += 2;
-			while (source[i] != '*' || source[i + 1] != '/'){
+			while (source[i] != '*' || source[i + 1] != '/') {
 				i++;
-				if (source[i] == 0){
+				if (source[i] == 0) {
 					printf("注释出错，没有找到 */，程序结束！！！\n");
 					exit(0);
 				}
 			}
 			i += 2;//跨过“*/”
 		}
-		if (source[i] != '\n'&&source[i] != '\t'&&source[i] != '\v'&&source[i] != '\r'){
+		if (source[i] != '\t'&&source[i] != '\v'&&source[i] != '\r') {
 			temp[count++] = source[i];
 		}
 	}
@@ -161,125 +170,222 @@ bool isLetter(char c) {
 }
 
 // 词法分析函数
-vector<pair<int, string> > analyse(vector<string> strs) {
-	vector<pair<int, string> > vec;
+vector<Node >  analyse(vector<string> strs, vector<int> line) {
+	vector<Node> vec;
+	Node temp;
 	for (unsigned int i = 0; i < strs.size(); i++) {
 		if (strs[i].size() == 1) {
 			if (strs[i] == "=") {
 				if (strs[i + 1] == "=") {
-					vec.push_back(pair<int, string>(EQ, "=="));
+					temp.first = EQ;
+					temp.second = "==";
+					temp.third = line[i];
+					vec.push_back(temp);
 					i++;
 				}
 				else {
-					vec.push_back(pair<int, string>(AS, "="));
+					temp.first = AS;
+					temp.second = "=";
+					temp.third = line[i];
+					vec.push_back(temp);
 				}
 			}
 			else if (strs[i] == ">") {
 				if (strs[i + 1] == "=") {
-					vec.push_back(pair<int, string>(HE, ">="));
+					temp.first = HE;
+					temp.second = ">=";
+					temp.third = line[i];
+					vec.push_back(temp);
 					i++;
 				}
 				else {
-					vec.push_back(pair<int, string>(HV, ">"));
+					temp.first = HV;
+					temp.second = ">";
+					temp.third = line[i];
+					vec.push_back(temp);
 				}
 			}
 			else if (strs[i] == "<") {
 				if (strs[i + 1] == "=") {
-					vec.push_back(pair<int, string>(LE, "<="));
+					temp.first = LE;
+					temp.second = "<=";
+					temp.third = line[i];
+					vec.push_back(temp);
 					i++;
 				}
 				else {
-					vec.push_back(pair<int, string>(LV, "<"));
+					temp.first = LV;
+					temp.second = "<";
+					temp.third = line[i];
+					vec.push_back(temp);
 				}
 			}
 			else if (strs[i] == "+") {
 				if ((strs[i - 1] == "=" || strs[i - 1] == "(") && isNum(strs[i + 1])) {//有符号常量（正数）
-					vec.push_back(pair<int, string>(NUM, strs[i].append(strs[++i])));
+					temp.first = NUM;
+					temp.second = strs[i].append(strs[++i]);
+					temp.third = line[i];
+					vec.push_back(temp);
 				}
 				else {//+
-					vec.push_back(pair<int, string>(ADD, "+"));
+					temp.first = ADD;
+					temp.second = "+";
+					temp.third = line[i];
+					vec.push_back(temp);
 				}
 			}
 			else if (strs[i] == "-") {
 				if ((strs[i - 1] == "=" || strs[i - 1] == "(") && isNum(strs[i + 1])) {//有符号常量（负数）
-					vec.push_back(pair<int, string>(NUM, strs[i].append(strs[++i])));
+					temp.first = NUM;
+					temp.second = strs[i].append(strs[++i]);
+					temp.third = line[i];
+					vec.push_back(temp);
 				}
 				else {//-
-					vec.push_back(pair<int, string>(SUB, "-"));
+					temp.first = SUB;
+					temp.second = "-";
+					temp.third = line[i];
+					vec.push_back(temp);
 				}
 			}
 			else if (strs[i] == "*") {//*
-				vec.push_back(pair<int, string>(MUL, "*"));
+				temp.first = MUL;
+				temp.second = "*";
+				temp.third = line[i];
+				vec.push_back(temp);
 			}
 			else if (strs[i] == "/") {///
-				vec.push_back(pair<int, string>(DIV, "/"));
+				temp.first = DIV;
+				temp.second = "/";
+				temp.third = line[i];
+				vec.push_back(temp);
 			}
-			else if (strs[i] == "%") {///
-				vec.push_back(pair<int, string>(MOD, "%"));
+			else if (strs[i] == "%") {//%
+				temp.first = MOD;
+				temp.second = "%";
+				temp.third = line[i];
+				vec.push_back(temp);
 			}
 			else if (strs[i] == "(") {//(
-				vec.push_back(pair<int, string>(LP, "("));
+				temp.first = LP;
+				temp.second = "(";
+				temp.third = line[i];
+				vec.push_back(temp);
 			}
 			else if (strs[i] == ")") {//)
-				vec.push_back(pair<int, string>(RP, ")"));
+				temp.first = RP;
+				temp.second = ")";
+				temp.third = line[i];
+				vec.push_back(temp);
 			}
 			else if (strs[i] == "[") {//[
-				vec.push_back(pair<int, string>(LBT, "["));
+				temp.first = LBT;
+				temp.second = "[";
+				temp.third = line[i];
+				vec.push_back(temp);
 			}
 			else if (strs[i] == "]") {//]
-				vec.push_back(pair<int, string>(RBT, "]"));
+				temp.first = RBT;
+				temp.second = "]";
+				temp.third = line[i];
+				vec.push_back(temp);
 			}
 			else if (strs[i] == "{") {//{
-				vec.push_back(pair<int, string>(LBS, "{"));
+				temp.first = LBS;
+				temp.second = "(";
+				temp.third = line[i];
+				vec.push_back(temp);
 			}
 			else if (strs[i] == "}") {//}
-				vec.push_back(pair<int, string>(RBS, "}"));
+				temp.first = RBS;
+				temp.second = ")";
+				temp.third = line[i];
+				vec.push_back(temp);
 			}
 			else if (strs[i] == ",") {//,
-				vec.push_back(pair<int, string>(COM, ","));
+				temp.first = COM;
+				temp.second = ",";
+				temp.third = line[i];
+				vec.push_back(temp);
 			}
 			else if (strs[i] == ":") {//:
-				vec.push_back(pair<int, string>(COL, ":"));
+				temp.first = COL;
+				temp.second = ":";
+				temp.third = line[i];
+				vec.push_back(temp);
 			}
 			else if (strs[i] == ";") {//;
-				vec.push_back(pair<int, string>(SEM, ";"));
+				temp.first = SEM;
+				temp.second = ";";
+				temp.third = line[i];
+				vec.push_back(temp);
 			}
 			else if (strs[i][0] >= '0'&&strs[i][0] <= '9') {//一位数字常量
-				vec.push_back(pair<int, string>(NUM, strs[i]));
+				temp.first = NUM;
+				temp.second = strs[i];
+				temp.third = line[i];
+				vec.push_back(temp);
 			}
 			else if (isLetter(strs[i][0])) {//一位字母变量名
-				vec.push_back(pair<int, string>(ID, strs[i]));
+				temp.first = ID;
+				temp.second = strs[i];
+				temp.third = line[i];
+				vec.push_back(temp);
 			}
 			else {//无法识别的字符
-				vec.push_back(pair<int, string>(ERROR, strs[i]));
+				temp.first = ERROR;
+				temp.second = strs[i];
+				temp.third = line[i];
+				vec.push_back(temp);
 				errorNum++;
 			}
 		}
 		else if (strs[i][0] >= '0'&&strs[i][0] <= '9' || strs[i][0] == '.') {//单词长度大于1，判断是不是常量
 			if (!isNum(strs[i])) {
 				errorNum++;
-				vec.push_back(pair<int, string>(ERROR, strs[i]));
+				temp.first = ERROR;
+				temp.second = strs[i];
+				temp.third = line[i];
+				vec.push_back(temp);
 			}
 			else if ((strs[i + 1][0] == '+' || strs[i + 1][0] == '-') && isNum(strs[i + 2])) {
-				vec.push_back(pair<int, string>(NUM, strs[i] + strs[i + 1] + strs[i + 2]));
+				temp.first = NUM;
+				temp.second = strs[i] + strs[i + 1] + strs[i + 2];
+				temp.third = line[i];
+				vec.push_back(temp);
 				i = i + 2;
 			}
 			else if ((strs[i + 1][0] == '+' || strs[i + 1][0] == '-') && isNum(strs[i + 2])) {
-				vec.push_back(pair<int, string>(NUM, strs[i] + strs[i + 1] + strs[i + 2]));
+				temp.first = NUM;
+				temp.second = strs[i] + strs[i + 1] + strs[i + 2];
+				temp.third = line[i];
+				vec.push_back(temp);
 				i = i + 2;
 			}
 			else {//无符号常量
-				vec.push_back(pair<int, string>(NUM, strs[i]));
+				temp.first = NUM;
+				temp.second = strs[i];
+				temp.third = line[i];
+				vec.push_back(temp);
 			}
 		}
 		else if (isKey(strs[i])) {//是否为关键字
-			vec.push_back(pair<int, string>(isKey(strs[i]), strs[i]));
+			temp.first = isKey(strs[i]);
+			temp.second = strs[i];
+			temp.third = line[i];
+			vec.push_back(temp);
 		}
 		else if (isLetter(strs[i][0]) || strs[i][0] == '_') {//是否为变量名
-			vec.push_back(pair<int, string>(ID, strs[i]));
+			temp.first = ID;
+			temp.second = strs[i];
+			temp.third = line[i];
+			vec.push_back(temp);
 		}
 		else {//无法识别的单词
-			vec.push_back(pair<int, string>(ERROR, strs[i]));
+			temp.first = ERROR;
+			temp.second = strs[i];
+			temp.third = line[i];
+			vec.push_back(temp);
 			errorNum++;
 		}
 	}
@@ -294,7 +400,7 @@ int main()
 	cin >> filePath;
 	filePath = "d:\\input.txt";
 	ifstream inputfile(filePath); //构造一个ifstream并打开给定文件
-	if (!inputfile){
+	if (!inputfile) {
 		cerr << "文件打开失败! " << endl;
 		return 0;
 	}
@@ -309,40 +415,42 @@ int main()
 	//预处理
 	filterSource(chars, num);
 	cout << "预处理后程序如下\n" << chars << endl;
-	
+
 	//提取单词
 	int begin = 0, end = 0; //单词的第一个和最后一个位置
 	vector<string> array;
+	vector<int>	linenum;//行号
 	do {
 		begin = getFirstChar(chars, begin);
 		string word = getWord(chars, begin, end);
 		if (end == -1)	break;
-		if (word.compare(" "))	array.push_back(word);
+		if (word.compare(" ")) {
+			array.push_back(word);
+			linenum.push_back(hang);
+		}
 		begin = end + 1;
 	} while (true);
-	for (int i = 0; i < array.size(); i++) {
-		cout << array[i] << endl;
-	}
-	vector< pair<int, string> > result = analyse(array);
-	cout << "\n词法分析结果：\n< 类别 , 内容 >" << endl;
+
+	vector<Node> result = analyse(array, linenum);
+	cout << "\n词法分析结果：\n< 类别 , 内容 ,行号 >" << endl;
 	for (unsigned int i = 0; i < result.size(); i++) {
 		if (result[i].first > 0 && result[i].first < 20) {
-			cout << "< 关键字 " << result[i].second << " >" << endl;
+			cout << "< 关键字 " << result[i].second << " " << result[i].third << " >" << endl;
 		}
 		else if (result[i].first == 20) {
-			cout << "< 标识符 " << result[i].second << " >" << endl;;
+			cout << "< 标识符 " << result[i].second << " " << result[i].third << " >" << endl;;
 		}
 		else if (result[i].first == 30) {
-			cout << "< 常量 " << result[i].second << " >" << endl;
+			cout << "< 常量 " << result[i].second << " " << result[i].third << " >" << endl;
 		}
 		else if (result[i].first > 30 && result[i].first <= 39) {
-			cout << "< 限定符 " << result[i].second << " >" << endl;
+			cout << "< 限定符 " << result[i].second << " " << result[i].third << " >" << endl;
 		}
 		else if (result[i].first > 39 && result[i].first <= 50) {
-			cout << "< 运算符 " << result[i].second << " >" << endl;
+			cout << "< 运算符 " << result[i].second << " " << result[i].third << " >" << endl;
 		}
 		else if (result[i].first == -1) {
-			cout << "< 无法识别的符号 " << result[i].second << " >" << endl;
+			cout << "< 无法识别的符号 " << result[i].second << " " << result[i].third << " >" << endl;
 		}
 	}
 	cout << "词法分析结束，有" << errorNum << "个无法识别的符号" << endl;
