@@ -1,90 +1,289 @@
 ﻿#include <iostream>
+#include <iomanip>
 #include <vector>
 #include <string>
+#include <cstring>
 #include <fstream>
-#include <iomanip>
+#include <stack>
 using namespace std;
 
-// 单词种别码, 1-17为关键字种别码
-#define CHAR 1
-#define SHORT 2
-#define INT 3
-#define LONG 4
-#define FLOAT 5
-#define DOUBLE 6
-#define CONST 7
-#define STATIC 8 
-#define IF 9
-#define ELSE 10
-#define WHILE 11
-#define DO 12
-#define FOR 13
-#define BREAK 14
-#define CONTINUE 15
-#define VOID 16
-#define RETURN 17
+ifstream origin_input;//源文件
+ifstream grammar_input;//文法
+ofstream output_result;//输出
 
-// 20为变量名种别码
-#define ID 20   
-
-// 30为常量种别码
-#define NUM 30    
-
-//31-39为限定符种别码
-#define LP 31  // (
-#define RP 32  // )
-#define LBT 33  // [
-#define RBT 34  // ]
-#define LBS 35  // {
-#define RBS 36  // }
-#define COM 37  // ,
-#define COL 38  // :
-#define SEM 39  // ;
-
-// 40-50为运算符种别码
-#define AS 40  // =
-#define EQ 41  // ==
-#define HV 42  // >
-#define LV 43  // <
-#define HE 44  // >=
-#define LE 45  // <=
-#define ADD 46  // + 
-#define SUB 47  // - 
-#define MUL 48  // * 
-#define DIV 49  // / 
-#define MOD	50	//%
-
-// -1为无法识别的字符标志码
-#define ERROR -1       
-int errorNum = 0;  // 记录词法分析错误的个数
-int hang = 1;
-struct Node
+char chars[4096];
+char state[100];
+char start;
+char final[100];
+int len_state = 0;
+int len_final = 0;
+bool isfinal[150];
+int hang = 1;//行数
+int begin = 0, end = 0; //单词的第一个和最后一个位置
+struct NFA_set//nfa结构体
 {
-	int first;
-	string second;
-	int third;
+	char set[100] = { '#' };//下一个状态
+	int len = 0;//输入同一字符的转移状态数量
 };
-// 找到第一个有效字符的位置
-int getFirstChar(string str, int begin) {
-	while (true) {
-		if (str[begin] != ' '&&str[begin] != '\n')	return begin;
-		if (str[begin] == '\n') {
-			hang++;
+NFA_set moves[100][100];//nfa图
+NFA_set new_set[100];
+int num_new_set = 0;
+int dfa[150][150];
+/*是否是数字*/
+bool isInteger(char a)
+{
+	if (a >= '0' && a <= '9') {
+		return true;
+	}
+	return false;
+}
+/*是否是字母*/
+bool isLetter(char c) {
+	if ((c >= 'a'&&c <= 'z') || (c >= 'A'&&c <= 'Z')) {
+		return true;
+	}
+	return false;
+}
+/*是否是关键字*/
+int isKey(string str) {
+	string keyword[15] = { "char","int","long","float","double","char",
+		"string","if","else","for","while","main","return","void","bool" };
+	for (int i = 0; i < 15; i++)
+	{
+		if (!str.compare(keyword[i])) {
+			return i + 1;
 		}
-		begin++;
+	}
+	return 0;
+}
+/*是否是运算符*/
+bool isOperator(char a)
+{
+	char Operator[20] = { '+','-','*','/','!','%','~','&','|','^','=','<','>' };
+	for (int i = 0; i < 13; i++)
+	{
+		if (Operator[i] == a)
+			return true;
+	}
+	return false;
+}
+/*是否是界符*/
+bool isDelimiter(char a)
+{
+	char Delimiter[20] = { ',','(',')','{','}',';' };
+	for (int i = 0; i < 7; i++)
+	{
+		if (Delimiter[i] == a)
+			return true;
+	}
+	return false;
+}
+/*是否已经在状态集中*/
+bool is_in_state(char a)
+{
+	for (int i = 0; i < len_state; i++)
+	{
+		if (a == state[i])
+			return true;
+	}
+	return false;
+}
+/*是否是终结符*/
+bool is_in_final(char a)
+{
+	for (int i = 0; i < len_final; i++)
+	{
+		if (a == final[i])
+			return true;
+	}
+	return false;
+}
+/*是否已经在子集中*/
+bool is_in_set(char a, NFA_set temp)
+{
+	for (int i = 0; i < temp.len; i++)
+	{
+		if (a == temp.set[i])
+			return true;
+	}
+	return false;
+}
+/*利用输入文法创建NFA*/
+void createNFA()
+{
+	int N;//文法个数
+	bool flag = true;   //是不是第一个
+	char ch;    //用来读 文法左边
+	char point;//用来读中间的->
+	string str;    //用来读 文法 右边
+	grammar_input >> N;
+	while (N--)
+	{
+		grammar_input >> ch >> point >> point >> str;
+		if (flag)//仅在第一个时执行
+		{
+			start = ch;
+			flag = false;
+		}
+		if (!is_in_state(ch))//左侧非终结符是否已经在状态集中
+		{
+			state[len_state++] = ch;
+		}
+
+		if (!is_in_final(str[0]))//是否是终结符
+		{
+			final[len_final++] = str[0];
+		}
+		if (str.size() > 1)//若右侧大于一个字符
+		{
+			moves[ch][str[0]].set[moves[ch][str[0]].len++] = str[1];//由一个终结符和一个非终结符构成路径
+		}
+		else
+		{
+			moves[ch][str[0]].set[moves[ch][str[0]].len++] = 'Y';  //仅有一个终结符，为终态
+		}
 	}
 }
-
-// 获取一个单词
-string getWord(string str, int begin, int& end) {
-	string reg = " +-*/=()[]{},:;"; // 匹配单词的正则表达式
-	end = str.find_first_of(reg, begin);
-	if (end == -1)	return "";
-	if (begin != end)	end--;
-	return str.substr(begin, end - begin + 1);
+/*和已有的newset有没有重复的，有就返回重复的编号*/
+int is_in_newset(NFA_set temp)
+{
+	bool flag[100];
+	bool flag1;
+	for (int i = 0; i < temp.len; i++)
+	{
+		flag[i] = false;
+	}
+	for (int i = 0; i < num_new_set; i++)
+	{
+		for (int k = 0; k < temp.len; k++)
+		{
+			for (int j = 0; j < new_set[i].len; j++)
+			{
+				if (temp.set[k] == new_set[i].set[j])
+				{
+					flag[k] = true;
+				}
+			}
+		}
+		flag1 = true;
+		for (int m = 0; m < temp.len; ++m)
+		{
+			if (flag[m] == false)
+			{
+				flag1 = false;
+				break;
+			}
+		}
+		if (flag1 == true)
+			return i;
+		for (int m = 0; m < temp.len; ++m)
+		{
+			flag[m] = false;
+		}
+	}
+	return -1;
 }
-
-//编译预处理，取出无用的字符和注释
+/*得到第一个完整的子集 */
+void get_Closure(NFA_set &temp)
+{
+	for (int i = 0; i < temp.len; i++)
+	{
+		for (int j = 0; j < moves[temp.set[i]]['@'].len; j++)
+		{
+			if (!is_in_set(moves[temp.set[i]]['@'].set[j], temp))//是否已经在栈中
+			{
+				temp.set[temp.len++] = moves[temp.set[i]]['@'].set[j];
+			}
+		}
+	}
+}
+/*判断是否是终态*/
+bool Is_contained_Y(NFA_set temp)
+{
+	for (int i = 0; i < temp.len; i++)
+	{
+		if (temp.set[i] == 'Y')
+			return true;
+	}
+	return false;
+}
+/*将NFA转化为DFA*/
+void NFA_to_DFA()
+{
+	num_new_set = 0;
+	NFA_set work_set;
+	NFA_set worked_set;
+	work_set.set[work_set.len++] = start;//输入第一个状态
+	worked_set.len = 0;
+	stack<NFA_set> s; //做一个NFA_set类型的栈
+	get_Closure(work_set);//第一次计算closure
+	s.push(work_set);//第一次入栈
+	new_set[num_new_set++] = work_set;
+	for (int i = 0; i < 150; i++)
+	{
+		for (int j = 0; j < 150; j++)
+		{
+			dfa[i][j] = '-1';
+		}
+	}
+	for (int i = 0; i < 150; i++)
+		isfinal[i] = false;
+	if (Is_contained_Y(work_set))
+		isfinal[num_new_set - 1] = true;
+	while (!s.empty())
+	{
+		work_set = s.top();//栈顶元素
+		s.pop();//弹出一个
+		for (int i = 0; i < len_final; i++)
+		{
+			for (int j = 0; j < work_set.len; j++)
+			{
+				for (int k = 0; k < moves[work_set.set[j]][final[i]].len; k++)
+				{
+					if (moves[work_set.set[j]][final[i]].set[k] != '#' && moves[work_set.set[j]][final[i]].set[k] != 'Y' && !is_in_set(moves[work_set.set[j]][final[i]].set[k], worked_set))//不在表中且不为终结
+					{
+						worked_set.set[worked_set.len++] = moves[work_set.set[j]][final[i]].set[k];//加入表
+					}
+					if (moves[work_set.set[j]][final[i]].set[k] == 'Y' && !is_in_set(moves[work_set.set[j]][final[i]].set[k], worked_set))//不在表中且为终结
+					{
+						worked_set.set[worked_set.len++] = 'Y';    //用Y表示终态
+					}
+				}
+			}
+			get_Closure(worked_set);
+			if (worked_set.len > 0 && is_in_newset(worked_set) == -1)
+			{
+				dfa[num_new_set - 1][final[i]] = num_new_set;
+				s.push(worked_set);
+				new_set[num_new_set++] = worked_set;
+				if (Is_contained_Y(worked_set))
+				{
+					isfinal[num_new_set - 1] = true;
+				}
+			}
+			if (worked_set.len > 0 && is_in_newset(worked_set) > -1 && final[i] != '@')
+			{
+				dfa[is_in_newset(work_set)][final[i]] = is_in_newset(worked_set);
+			}
+			worked_set.len = 0;
+		}
+	}
+}
+/*判断是否满足DFA*/
+bool DFA(string str)
+{
+	char now_state = 0;
+	for (int i = 0; i < str.size(); i++)
+	{
+		now_state = dfa[now_state][str[i]];
+		if (now_state == -1)
+			return false;
+	}
+	if (isfinal[now_state] == true)
+		return true;
+	return false;
+}
+/*过滤源代码*/
 void filterSource(char source[], int num) {
 	char temp[5000];
 	int count = 0;
@@ -112,346 +311,134 @@ void filterSource(char source[], int num) {
 	temp[count] = '\0';
 	strcpy_s(source, 4096, temp);//产生处理之后的源程序
 }
-
-// 判断是不是关键字，是就返回关键字的种别码
-int isKey(string str) {
-	string keys[17] = { "char", "short", "int", "long", "float", "double", "const", "static", "if", "else", "while",
-				"do", "for", "break", "continue", "void", "return" };
-	for (unsigned int i = 0; i < 17; i++)
-	{
-		if (!str.compare(keys[i])) {
-			return i + 1;
-		}
-	}
-	return 0;
+/*获取单词*/
+string getWord(string str, int begin, int& end) {
+	string reg = " */=()[]{},:;"; // 匹配单词的正则表达式
+	end = str.find_first_of(reg, begin);
+	if (end == -1)	return "";
+	if (begin != end)	end--;
+	return str.substr(begin, end - begin + 1);
 }
-
-// 判断是不是常量(非负)
-bool isNum(string str) {
-	int dot = 0; // .的个数
-	int notNum = 0; // 不是数字的个数
-	for (int i = 0; i < str.length(); i++) {
-		if (!(str[i] >= '0' && str[i] <= '9')) {
-			notNum++;
-			if (notNum > dot + 1) {
-				cout << "该常量" << str << "的词法不正确" << endl;
-				return false;
+/*获取第一个字符*/
+int getFirstChar(string str, int begin) {
+	while (true) {
+		if (str[begin] != ' '&&str[begin] != '\n')	return begin;
+		else if (str[begin] == '\n') {
+			hang++;
+		}
+		begin++;
+	}
+}
+/*扫描单词*/
+void scan(vector<string> str, vector<int> line) {
+	for (int i = 0; i < str.size(); i++) {
+		if (isInteger(str[i][0])) {
+			if (DFA(str[i]))
+			{
+				cout << setw(10) << str[i] << " " << setw(10) << "常量" << setw(10) << line[i] << endl;
+				output_result << 3;
 			}
-			else if (str[i] == '.') {
-				dot++;
-				if (dot > 1)
+			else
+			{
+				cout << setw(10) << str[i] << " " << setw(10) << "出错，不是常量" << setw(10) << line[i] << endl;
+			}
+		}
+		if (isLetter(str[i][0])) {
+			if (isKey(str[i]))
+			{
+				cout << setw(10) << str[i] << " " << setw(10) << "关键字" << setw(10) << line[i] << endl;
+				//output_result << f(str);
+			}
+			else
+			{
+				if (DFA(str[i]))
 				{
-					cout << "该常量" << str << "的词法不正确" << endl;
-					return false;
+					cout << setw(10) << str[i] << " " << setw(10) << "标识符" << setw(10) << line[i] << endl;
+					output_result << 2;
+				}
+				else
+				{
+					cout << setw(10) << str[i] << " " << setw(10) << "出错，不是标识符" << setw(10) << line[i] << endl;
 				}
 			}
-			else if ((str[i - 1] >= '0' && str[i - 1] <= '9') && (str[i] == 'E')
-				&& (i == str.length() - 1 || (str[i + 1] >= '0' && str[i + 1] <= '9'))) {
-				continue;
+		}
+		if (isDelimiter(str[i][0]))
+		{
+			cout << setw(10) << str[i] << " " << setw(10) << "界符" << setw(10) << line[i] << endl;
+			output_result << str[i];
+		}
+		if (isOperator(str[i][0]))
+		{
+			if (isOperator(str[i + 1][0]))
+			{
+				cout << setw(9) << str[i] << str[i + 1] << " " << setw(10) << "运算符" << setw(10) << line[i] << endl;
+				i++;
+				//output_result<<4;
 			}
-			else if ((str[i - 1] >= '0' && str[i - 1] <= '9') && (str[i] == 'i')
-				&& (i == str.length() - 1 || (str[i + 1] >= '0' && str[i + 1] <= '9'))) {
-				continue;
-			}
-			else {
-				cout << "该常量" << str << "的词法不正确";
-				return false;
+			else
+			{
+				cout << setw(10) << str[i] << " " << setw(10) << "运算符" << setw(10) << line[i] << endl;
+				output_result << str[i];
 			}
 		}
 	}
-	return true;
 }
-
-// 判断是不是字母
-bool isLetter(char c) {
-	if ((c >= 'a'&&c <= 'z') || (c >= 'A'&&c <= 'Z'))
-		return true;
-	return false;
-}
-
-// 词法分析函数
-vector<Node >  analyse(vector<string> strs, vector<int> line) {
-	vector<Node> vec;
-	Node temp;
-	for (unsigned int i = 0; i < strs.size(); i++) {
-		if (strs[i].size() == 1) {
-			if (strs[i] == "=") {
-				if (strs[i + 1] == "=") {
-					temp.first = EQ;
-					temp.second = "==";
-					temp.third = line[i];
-					vec.push_back(temp);
-					i++;
-				}
-				else {
-					temp.first = AS;
-					temp.second = "=";
-					temp.third = line[i];
-					vec.push_back(temp);
-				}
-			}
-			else if (strs[i] == ">") {
-				if (strs[i + 1] == "=") {
-					temp.first = HE;
-					temp.second = ">=";
-					temp.third = line[i];
-					vec.push_back(temp);
-					i++;
-				}
-				else {
-					temp.first = HV;
-					temp.second = ">";
-					temp.third = line[i];
-					vec.push_back(temp);
-				}
-			}
-			else if (strs[i] == "<") {
-				if (strs[i + 1] == "=") {
-					temp.first = LE;
-					temp.second = "<=";
-					temp.third = line[i];
-					vec.push_back(temp);
-					i++;
-				}
-				else {
-					temp.first = LV;
-					temp.second = "<";
-					temp.third = line[i];
-					vec.push_back(temp);
-				}
-			}
-			else if (strs[i] == "+") {
-				if ((strs[i - 1] == "=" || strs[i - 1] == "(") && isNum(strs[i + 1])) {//有符号常量（正数）
-					temp.first = NUM;
-					temp.second = strs[i].append(strs[++i]);
-					temp.third = line[i];
-					vec.push_back(temp);
-				}
-				else {//+
-					temp.first = ADD;
-					temp.second = "+";
-					temp.third = line[i];
-					vec.push_back(temp);
-				}
-			}
-			else if (strs[i] == "-") {
-				if ((strs[i - 1] == "=" || strs[i - 1] == "(") && isNum(strs[i + 1])) {//有符号常量（负数）
-					temp.first = NUM;
-					temp.second = strs[i].append(strs[++i]);
-					temp.third = line[i];
-					vec.push_back(temp);
-				}
-				else {//-
-					temp.first = SUB;
-					temp.second = "-";
-					temp.third = line[i];
-					vec.push_back(temp);
-				}
-			}
-			else if (strs[i] == "*") {//*
-				temp.first = MUL;
-				temp.second = "*";
-				temp.third = line[i];
-				vec.push_back(temp);
-			}
-			else if (strs[i] == "/") {///
-				temp.first = DIV;
-				temp.second = "/";
-				temp.third = line[i];
-				vec.push_back(temp);
-			}
-			else if (strs[i] == "%") {//%
-				temp.first = MOD;
-				temp.second = "%";
-				temp.third = line[i];
-				vec.push_back(temp);
-			}
-			else if (strs[i] == "(") {//(
-				temp.first = LP;
-				temp.second = "(";
-				temp.third = line[i];
-				vec.push_back(temp);
-			}
-			else if (strs[i] == ")") {//)
-				temp.first = RP;
-				temp.second = ")";
-				temp.third = line[i];
-				vec.push_back(temp);
-			}
-			else if (strs[i] == "[") {//[
-				temp.first = LBT;
-				temp.second = "[";
-				temp.third = line[i];
-				vec.push_back(temp);
-			}
-			else if (strs[i] == "]") {//]
-				temp.first = RBT;
-				temp.second = "]";
-				temp.third = line[i];
-				vec.push_back(temp);
-			}
-			else if (strs[i] == "{") {//{
-				temp.first = LBS;
-				temp.second = "(";
-				temp.third = line[i];
-				vec.push_back(temp);
-			}
-			else if (strs[i] == "}") {//}
-				temp.first = RBS;
-				temp.second = ")";
-				temp.third = line[i];
-				vec.push_back(temp);
-			}
-			else if (strs[i] == ",") {//,
-				temp.first = COM;
-				temp.second = ",";
-				temp.third = line[i];
-				vec.push_back(temp);
-			}
-			else if (strs[i] == ":") {//:
-				temp.first = COL;
-				temp.second = ":";
-				temp.third = line[i];
-				vec.push_back(temp);
-			}
-			else if (strs[i] == ";") {//;
-				temp.first = SEM;
-				temp.second = ";";
-				temp.third = line[i];
-				vec.push_back(temp);
-			}
-			else if (strs[i][0] >= '0'&&strs[i][0] <= '9') {//一位数字常量
-				temp.first = NUM;
-				temp.second = strs[i];
-				temp.third = line[i];
-				vec.push_back(temp);
-			}
-			else if (isLetter(strs[i][0])) {//一位字母变量名
-				temp.first = ID;
-				temp.second = strs[i];
-				temp.third = line[i];
-				vec.push_back(temp);
-			}
-			else {//无法识别的字符
-				temp.first = ERROR;
-				temp.second = strs[i];
-				temp.third = line[i];
-				vec.push_back(temp);
-				errorNum++;
-			}
-		}
-		else if (strs[i][0] >= '0'&&strs[i][0] <= '9' || strs[i][0] == '.') {//单词长度大于1，判断是不是常量
-			if (!isNum(strs[i])) {
-				errorNum++;
-				temp.first = ERROR;
-				temp.second = strs[i];
-				temp.third = line[i];
-				vec.push_back(temp);
-			}
-			else if ((strs[i + 1][0] == '+' || strs[i + 1][0] == '-') && isNum(strs[i + 2])) {
-				temp.first = NUM;
-				temp.second = strs[i] + strs[i + 1] + strs[i + 2];
-				temp.third = line[i];
-				vec.push_back(temp);
-				i = i + 2;
-			}
-			else if ((strs[i + 1][0] == '+' || strs[i + 1][0] == '-') && isNum(strs[i + 2])) {
-				temp.first = NUM;
-				temp.second = strs[i] + strs[i + 1] + strs[i + 2];
-				temp.third = line[i];
-				vec.push_back(temp);
-				i = i + 2;
-			}
-			else {//无符号常量
-				temp.first = NUM;
-				temp.second = strs[i];
-				temp.third = line[i];
-				vec.push_back(temp);
-			}
-		}
-		else if (isKey(strs[i])) {//是否为关键字
-			temp.first = isKey(strs[i]);
-			temp.second = strs[i];
-			temp.third = line[i];
-			vec.push_back(temp);
-		}
-		else if (isLetter(strs[i][0]) || strs[i][0] == '_') {//是否为变量名
-			temp.first = ID;
-			temp.second = strs[i];
-			temp.third = line[i];
-			vec.push_back(temp);
-		}
-		else {//无法识别的单词
-			temp.first = ERROR;
-			temp.second = strs[i];
-			temp.third = line[i];
-			vec.push_back(temp);
-			errorNum++;
-		}
+/*打开文件及初始化*/
+void init() {
+	origin_input.open("d:\\1\\词法分析_源程序.txt");
+	if (origin_input) {
+		cout << "源程序文件打开成功! " << endl;
 	}
-	return vec;
-}
-
-int main()
-{
-	//导入文件
-	string filePath;
-	cout << "请输入源代码文件路径：";
-	cin >> filePath;
-	filePath = "d:\\input.txt";
-	ifstream inputfile(filePath); //构造一个ifstream并打开给定文件
-	if (!inputfile) {
-		cerr << "文件打开失败! " << endl;
-		return 0;
+	else {
+		cerr << "源程序文件打开失败! " << endl;
+		exit(0);
 	}
-	char chars[4096];
+	grammar_input.open("D:\\1\\词法分析_文法.txt");
+	if (grammar_input) {
+		cout << "文法文件打开成功! " << endl;
+	}
+	else {
+		cerr << "文法文件打开失败! " << endl;
+		exit(0);
+	}
+	output_result.open("D:\\1\\output.txt");
+	if (!output_result) {
+		cerr << "输出文法文件打开失败! " << endl;
+		exit(0);
+	}
 	memset(chars, 0, sizeof(chars));
-	inputfile.getline(chars, 4096, EOF);
+}
+/*关闭文件*/
+void endf() {
+	origin_input.close();
+	grammar_input.close();
+	output_result.close();
+}
+int main() {
+	init();
+	origin_input.getline(chars, 4096, EOF);
 	int num = 0;
-	while (chars[num] != 0) {
+	while (chars[num] != 0)
+	{
 		num++;
 	}
-	inputfile.close();//关闭文件
-	//预处理
-	filterSource(chars, num);
-	cout << "预处理后程序如下\n" << chars << endl;
-
+	filterSource(chars, num);//预处理
 	//提取单词
-	int begin = 0, end = 0; //单词的第一个和最后一个位置
-	vector<string> array;
-	vector<int>	linenum;//行号
-	do {
-		begin = getFirstChar(chars, begin);
-		string word = getWord(chars, begin, end);
-		if (end == -1)	break;
-		if (word.compare(" ")) {
-			array.push_back(word);
-			linenum.push_back(hang);
-		}
+	int begin = 0, end = 0; //单词的第一个和最后一个字符
+	vector<string> array;//保存单词
+	vector<int>	line_Num;//行号
+	while (1)
+	{
+		begin = getFirstChar(chars, begin);//获取第一个字符的位置
+		string word = getWord(chars, begin, end);//获取单词
+		if (end == -1)	break;//读取完成
+		array.push_back(word);
+		line_Num.push_back(hang);
 		begin = end + 1;
-	} while (true);
-
-	vector<Node> result = analyse(array, linenum);
-	cout << "\n词法分析结果：\n< 类别 , 内容 ,行号 >" << endl;
-	for (unsigned int i = 0; i < result.size(); i++) {
-		if (result[i].first > 0 && result[i].first < 20) {
-			cout << "< 关键字 " << result[i].second << " " << result[i].third << " >" << endl;
-		}
-		else if (result[i].first == 20) {
-			cout << "< 标识符 " << result[i].second << " " << result[i].third << " >" << endl;;
-		}
-		else if (result[i].first == 30) {
-			cout << "< 常量 " << result[i].second << " " << result[i].third << " >" << endl;
-		}
-		else if (result[i].first > 30 && result[i].first <= 39) {
-			cout << "< 限定符 " << result[i].second << " " << result[i].third << " >" << endl;
-		}
-		else if (result[i].first > 39 && result[i].first <= 50) {
-			cout << "< 运算符 " << result[i].second << " " << result[i].third << " >" << endl;
-		}
-		else if (result[i].first == -1) {
-			cout << "< 无法识别的符号 " << result[i].second << " " << result[i].third << " >" << endl;
-		}
 	}
-	cout << "词法分析结束，有" << errorNum << "个无法识别的符号" << endl;
+	createNFA();
+	NFA_to_DFA();
+	scan(array, line_Num);
+	endf();
+	return 0;
 }
