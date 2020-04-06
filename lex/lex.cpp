@@ -6,33 +6,33 @@
 #include <fstream>
 #include <stack>
 using namespace std;
+const int maxn = 100;
 
 ifstream origin_input;//源文件
 ifstream grammar_input;//文法
 ofstream output_result;//输出
 
 char chars[4096];//输入流
-char state[100];//状态集
-char final[100];//终结符集
+char state[maxn];//状态集
+char final[maxn];//终结符集
 char start;//获取第一个状态
 
 int len_state = 0;//状态集大小
 int len_final = 0;//终结符集大小
-bool isfinal[150];
+bool isfinal[maxn];//终态集
 int hang = 1;//行数
-int begin = 0, end = 0; //单词的第一个和最后一个位置
 
 struct NFA_set//nfa结构体
 {
-	char set[100] = { '#' };//默认下一个状态
+	char set[maxn] = { '#' };//默认下一个状态
 	int len = 0;//输入同一字符的转移状态数量
 };
 
-NFA_set moves[100][100];//nfa图
-NFA_set new_set[100];//定义了nfa类型数组存储生成的新的集合
+NFA_set moves[maxn][maxn];//nfa图
+NFA_set new_set[maxn];//定义了nfa类型数组存储生成的新的集合
 int num_new_set;//新的I的数量
-int dfa[150][150];
-string keyword[15] = { "char","int","long","float","double","char",
+int dfa[maxn][maxn];
+string keyword[14] = { "char","int","long","float","double",
 		"string","if","else","for","while","main","return","void","bool" };
 /*关键字输出转换*/
 string words(string str)
@@ -51,7 +51,6 @@ string words(string str)
 	if (str == keyword[11])	return "l";
 	if (str == keyword[12])	return "m";
 	if (str == keyword[13])	return "n";
-	if (str == keyword[14])	return "o";
 }
 /*是否是数字*/
 bool isInteger(char a)
@@ -129,6 +128,79 @@ bool is_in_set(char a, NFA_set temp)
 			return true;
 	}
 	return false;
+}
+/*打开文件及初始化*/
+void Init() {
+	origin_input.open("d:\\1\\词法分析_源程序.txt");
+	if (origin_input) {
+		cout << "源程序文件打开成功! " << endl;
+	}
+	else {
+		cerr << "源程序文件打开失败! " << endl;
+		exit(0);
+	}
+	grammar_input.open("D:\\1\\词法分析_文法.txt");
+	if (grammar_input) {
+		cout << "文法文件打开成功! " << endl;
+	}
+	else {
+		cerr << "文法文件打开失败! " << endl;
+		exit(0);
+	}
+	output_result.open("D:\\1\\词法分析_output.txt");
+	if (!output_result) {
+		cerr << "输出文法文件打开失败! " << endl;
+		exit(0);
+	}
+	memset(chars, 0, sizeof(chars));
+	memset(dfa, -1, sizeof(dfa));
+	memset(isfinal, 0, sizeof(isfinal));
+}
+/*过滤源代码*/
+void filterSource(char source[], int num) {
+	char temp[5000];
+	int count = 0;
+	for (int i = 0; i <= num; i++) {
+		if (source[i] == '/'&&source[i + 1] == '/') {//单行注释
+			while (source[i] != '\n') {
+				i++;//向后扫描
+			}
+		}
+		if (source[i] == '/'&&source[i + 1] == '*') {//多行注释
+			i += 2;
+			while (source[i] != '*' || source[i + 1] != '/') {
+				i++;
+				if (source[i] == 0) {
+					printf("注释出错，没有找到 */，程序结束！！！\n");
+					exit(0);
+				}
+			}
+			i += 2;//跨过“*/”
+		}
+		if (source[i] != '\t'&&source[i] != '\v'&&source[i] != '\r') {
+			temp[count++] = source[i];
+		}
+	}
+	temp[count] = '\0';
+	strcpy_s(source, 4096, temp);//产生处理之后的源程序
+}
+/*获取单词*/
+string getWord(string str, int begin, int& end) {
+	string reg = " */=()[]{},:;"; // 匹配单词的正则表达式
+	end = str.find_first_of(reg, begin);
+	if (end == -1)	return "";
+	if (begin != end)	end--;
+	return str.substr(begin, end - begin + 1);
+}
+/*获取第一个字符*/
+int getFirstChar(string str, int begin) {
+	while (true) {
+		if (str[begin] != ' '&&str[begin] != '\n')	return begin;
+		else if (str[begin] == '\n') {
+			hang++;
+		}
+		begin++;
+	}
 }
 /*利用输入文法创建NFA*/
 void createNFA()
@@ -293,52 +365,6 @@ bool DFA(string str)
 		return true;
 	return false;
 }
-/*过滤源代码*/
-void filterSource(char source[], int num) {
-	char temp[5000];
-	int count = 0;
-	for (int i = 0; i <= num; i++) {
-		if (source[i] == '/'&&source[i + 1] == '/') {//单行注释
-			while (source[i] != '\n') {
-				i++;//向后扫描
-			}
-		}
-		if (source[i] == '/'&&source[i + 1] == '*') {//多行注释
-			i += 2;
-			while (source[i] != '*' || source[i + 1] != '/') {
-				i++;
-				if (source[i] == 0) {
-					printf("注释出错，没有找到 */，程序结束！！！\n");
-					exit(0);
-				}
-			}
-			i += 2;//跨过“*/”
-		}
-		if (source[i] != '\t'&&source[i] != '\v'&&source[i] != '\r') {
-			temp[count++] = source[i];
-		}
-	}
-	temp[count] = '\0';
-	strcpy_s(source, 4096, temp);//产生处理之后的源程序
-}
-/*获取单词*/
-string getWord(string str, int begin, int& end) {
-	string reg = " */=()[]{},:;"; // 匹配单词的正则表达式
-	end = str.find_first_of(reg, begin);
-	if (end == -1)	return "";
-	if (begin != end)	end--;
-	return str.substr(begin, end - begin + 1);
-}
-/*获取第一个字符*/
-int getFirstChar(string str, int begin) {
-	while (true) {
-		if (str[begin] != ' '&&str[begin] != '\n')	return begin;
-		else if (str[begin] == '\n') {
-			hang++;
-		}
-		begin++;
-	}
-}
 /*扫描单词*/
 void Scan(vector<string> str, vector<int> line) {
 	cout << setw(15) << "行号" << " " << setw(15) << "类别" << setw(15) << "内容" << endl;
@@ -384,7 +410,7 @@ void Scan(vector<string> str, vector<int> line) {
 			{
 				cout << setw(15) << line[i] << " " << setw(15) << "运算符" << setw(14) << str[i] << str[i + 1] << endl;
 				i++;
-				output_result<<4;
+				output_result << 4;
 			}
 			else
 			{
@@ -393,33 +419,7 @@ void Scan(vector<string> str, vector<int> line) {
 			}
 		}
 	}
-}
-/*打开文件及初始化*/
-void Init() {
-	origin_input.open("d:\\1\\词法分析_源程序.txt");
-	if (origin_input) {
-		cout << "源程序文件打开成功! " << endl;
-	}
-	else {
-		cerr << "源程序文件打开失败! " << endl;
-		exit(0);
-	}
-	grammar_input.open("D:\\1\\词法分析_文法.txt");
-	if (grammar_input) {
-		cout << "文法文件打开成功! " << endl;
-	}
-	else {
-		cerr << "文法文件打开失败! " << endl;
-		exit(0);
-	}
-	output_result.open("D:\\1\\output.txt");
-	if (!output_result) {
-		cerr << "输出文法文件打开失败! " << endl;
-		exit(0);
-	}
-	memset(chars, 0, sizeof(chars));
-	memset(dfa, -1, sizeof(dfa));
-	memset(isfinal, 0, sizeof(isfinal));
+	output_result << "#";
 }
 /*关闭文件*/
 void End() {
@@ -431,7 +431,7 @@ int main() {
 	Init();
 	origin_input.getline(chars, 4096, EOF);
 	int num = 0;
-	while (chars[num])	num++;
+	while (chars[num])	num++;//获取内容输入大小
 	filterSource(chars, num);//预处理
 	
 	//提取单词
